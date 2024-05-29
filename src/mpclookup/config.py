@@ -14,9 +14,7 @@ class Config(BaseSettings):
 
     name: str = Field("mpc-lookup", title="Name of application")
 
-    path_prefix: str = Field(
-        "/mpc-lookup", title="URL prefix for application"
-    )
+    path_prefix: str = Field("/mpc-lookup", title="URL prefix for application")
 
     profile: Profile = Field(
         Profile.development, title="Application logging profile"
