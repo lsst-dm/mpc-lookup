@@ -2,7 +2,8 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import RedirectResponse
 from safir.dependencies.logger import logger_dependency
 from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
@@ -50,3 +51,31 @@ async def get_index(
         application_name=config.name,
     )
     return Index(metadata=metadata)
+
+
+_DESIGNATION_PREPEND = "2011 "
+
+
+@external_router.get("/search", response_class=RedirectResponse)
+async def search(
+    designation: Annotated[str, Query()],
+    logger: Annotated[BoundLogger, Depends(logger_dependency)],
+) -> str:
+    """
+    Request a redirect to the MPCORB record for a given designation.
+
+    Notes
+    -----
+    Example request:
+
+    /mpc-lookup/search?designation=2011+1001+T-2
+
+    """
+    logger.info("Request for designation URL", designation=designation)
+    fd = designation.replace(_DESIGNATION_PREPEND, "")
+    redirect_url = (
+        "https://www.minorplanetcenter.net/db_search/"
+        f"show_object?object_id={fd}"
+    )
+    logger.info("Redirecting to designation URL", redirect_url=redirect_url)
+    return redirect_url
