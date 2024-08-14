@@ -1,9 +1,10 @@
 """Handlers for the app's external root, ``/mpc-lookup/``."""
 
 from typing import Annotated
+from urllib.parse import urlencode, urlparse
 
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from safir.dependencies.logger import logger_dependency
 from safir.metadata import get_metadata
 from structlog.stdlib import BoundLogger
@@ -60,22 +61,55 @@ _DESIGNATION_PREPEND = "2011 "
 async def search(
     designation: Annotated[str, Query()],
     logger: Annotated[BoundLogger, Depends(logger_dependency)],
+    request: Request,
 ) -> str:
     """
-    Request a redirect to the MPCORB record for a given designation.
+    Request a redirect to the MPCORB database record for a given designation.
 
     Notes
     -----
-    Example request:
+    An example request could be:
 
-    /mpc-lookup/search?designation=2011+1001+T-2
+    `/mpc-lookup/search?designation=2011+1001+T-2`
 
+    The "2011 " prefix, which is present in the DP0.3 data, will be
+    automatically stripped out so that the designation has a valid format.
+
+    A designation without any spaces will cause a redirect to an endpoint
+    which returns a message indicating that the object appears to be synthetic.
     """
     logger.info("Request for designation URL", designation=designation)
     fd = designation.replace(_DESIGNATION_PREPEND, "")
-    redirect_url = (
-        "https://www.minorplanetcenter.net/db_search/"
-        f"show_object?object_id={fd}"
+    if " " in fd:
+        redirect_url = urlparse(
+            "https://www.minorplanetcenter.net/db_search/"
+            f"show_object?object_id={fd}"
+        )
+        logger.info("Redirecting to MPC URL", redirect_url=redirect_url)
+    else:
+        redirect_url = urlparse(
+            str(request.url_for("get_synthetic_object"))
+            + "?"
+            + urlencode({"designation": designation})
+        )
+        logger.info(
+            "Redirecting synthetic object to", redirect_url=redirect_url
+        )
+    return redirect_url.geturl()
+
+
+@external_router.get("/synthetic_object", response_class=HTMLResponse)
+async def get_synthetic_object(
+    designation: Annotated[str, Query()],
+) -> HTMLResponse:
+    return HTMLResponse(
+        content=f"""
+        <html>
+            <body>
+                <p>{designation} appears to be a synthetic object
+                from the DP0.3 input simulation.</p>
+            </body>
+        </html>
+        """,
+        status_code=200,
     )
-    logger.info("Redirecting to designation URL", redirect_url=redirect_url)
-    return redirect_url
